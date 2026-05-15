@@ -9,13 +9,21 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.12"
+fastapi = "^0.115.12"
+pydantic-settings = "^2.9.1"
+sqlalchemy = "^2.0.41"
+alembic = "^1.16.1"
+psycopg = "^3.3.4"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.0"
+httpx = "^0.28.1"
+testcontainers = "^4.14.2"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+pythonpath = ["."]
 
 [build-system]
 requires = ["poetry-core"]
