@@ -2,14 +2,35 @@
 
 ## Backend foundation bootstrap
 
-Run the backend foundation stack locally with Poetry and Docker Compose:
+Run the backend with an external PostgreSQL instance (no compose-managed DB sidecar):
 
 ```bash
 poetry install
-docker compose up -d db
+cp .env.example .env
+# edit .env with your external PostgreSQL values
 poetry run alembic -c apps/backend/alembic.ini upgrade head
-poetry run uvicorn apps.backend.app.main:app --reload
+docker compose up -d backend
 ```
+
+Required external PostgreSQL contract:
+
+- `PITAGORAS_DB_HOST`
+- `PITAGORAS_DB_PORT`
+- `PITAGORAS_DB_NAME`
+- `PITAGORAS_DB_USER`
+- `PITAGORAS_DB_PASSWORD`
+
+Recommended optional settings:
+
+- `PITAGORAS_DB_SSLMODE`
+- `PITAGORAS_DB_POOL_SIZE`
+- `PITAGORAS_DB_MAX_OVERFLOW`
+- `PITAGORAS_DB_POOL_RECYCLE_SECONDS`
+
+Deploy order for external DB environments:
+1. Configure `.env` from `.env.example`.
+2. Run Alembic migrations against the external PostgreSQL target.
+3. Start backend container with `docker compose up -d backend`.
 
 Smoke-check API runtime endpoints:
 
