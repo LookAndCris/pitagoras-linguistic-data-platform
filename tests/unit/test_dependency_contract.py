@@ -30,3 +30,13 @@ def test_psycopg_uses_binary_distribution_for_slim_docker_runtime() -> None:
     psycopg_dependency = dependencies["psycopg"]
     assert isinstance(psycopg_dependency, dict)
     assert "binary" in psycopg_dependency["extras"]
+
+
+def test_frontend_runtime_dependencies_are_declared() -> None:
+    pyproject_path = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+
+    dependencies = data["tool"]["poetry"]["dependencies"]
+
+    assert "streamlit" in dependencies
+    assert "httpx" in dependencies
