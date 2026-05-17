@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${PITAGORAS_LOCAL_DB_NAME:-pitagoras}
+      POSTGRES_USER: ${PITAGORAS_LOCAL_DB_USER:-pitagoras}
+      POSTGRES_PASSWORD: ${PITAGORAS_LOCAL_DB_PASSWORD:-pitagoras}
+    ports:
+      - "${PITAGORAS_LOCAL_DB_PORT:-55432}:5432"
+    volumes:
+      - pitagoras-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PITAGORAS_LOCAL_DB_USER:-pitagoras} -d ${PITAGORAS_LOCAL_DB_NAME:-pitagoras}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PITAGORAS_DB_HOST: postgres
+      PITAGORAS_DB_PORT: 5432
+      PITAGORAS_DB_NAME: ${PITAGORAS_LOCAL_DB_NAME:-pitagoras}
+      PITAGORAS_DB_USER: ${PITAGORAS_LOCAL_DB_USER:-pitagoras}
+      PITAGORAS_DB_PASSWORD: ${PITAGORAS_LOCAL_DB_PASSWORD:-pitagoras}
+      PITAGORAS_DB_SSLMODE: disable
+
+volumes:
+  pitagoras-postgres-data:

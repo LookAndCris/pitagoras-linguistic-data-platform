@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from alembic import context
+from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 
 from packages.core.alembic_config import resolve_alembic_database_url
@@ -8,6 +9,7 @@ from packages.core.schema import Base
 from packages.core.settings import Settings
 
 config = context.config
+load_dotenv()
 target_metadata = Base.metadata
 
 

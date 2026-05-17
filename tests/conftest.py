@@ -1,3 +1,4 @@
+import os
 from collections.abc import Callable, Generator
 from pathlib import Path
 
@@ -17,12 +18,25 @@ def _sqlite_url(db_path: Path) -> str:
     return f"sqlite+pysqlite:///{db_path}"
 
 
+def _preserve_pitagoras_env() -> tuple[dict[str, str], list[str]]:
+    snapshot = {key: value for key, value in os.environ.items() if key.startswith("PITAGORAS_")}
+    current_keys = [key for key in os.environ if key.startswith("PITAGORAS_")]
+    return snapshot, current_keys
+
+
 @pytest.fixture
 def alembic_upgrade() -> Callable[[str, str], None]:
     def _upgrade(database_url: str, revision: str = "head") -> None:
+        snapshot, _ = _preserve_pitagoras_env()
         alembic_cfg = Config("apps/backend/alembic.ini")
         alembic_cfg.set_main_option("sqlalchemy.url", database_url)
-        command.upgrade(alembic_cfg, revision)
+        try:
+            command.upgrade(alembic_cfg, revision)
+        finally:
+            current_keys = [key for key in os.environ if key.startswith("PITAGORAS_")]
+            for key in current_keys:
+                os.environ.pop(key, None)
+            os.environ.update(snapshot)
 
     return _upgrade
 
@@ -50,6 +64,7 @@ def app_client(migrated_sqlite_database_url: str) -> Generator[TestClient, None,
 
 @pytest.fixture
 def postgres_database_url() -> Generator[str, None, None]:
+    pytest.importorskip("psycopg", exc_type=ImportError)
     postgres_module = pytest.importorskip("testcontainers.postgres")
     try:
         container = postgres_module.PostgresContainer("postgres:16-alpine")

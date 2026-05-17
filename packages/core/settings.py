@@ -1,6 +1,7 @@
 from urllib.parse import quote_plus
 
 from pydantic import model_validator
+from pydantic_settings import PydanticBaseSettingsSource
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,6 +22,23 @@ class Settings(BaseSettings):
         env_prefix="PITAGORAS_",
         extra="ignore",
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        init_values = init_settings()
+
+        if init_values:
+            env_settings = _DatabaseContractOverrideSource(env_settings, init_values)
+            dotenv_settings = _DatabaseContractOverrideSource(dotenv_settings, init_values)
+
+        return init_settings, env_settings, dotenv_settings, file_secret_settings
 
     @model_validator(mode="after")
     def validate_database_contract(self) -> "Settings":
@@ -63,3 +81,22 @@ class Settings(BaseSettings):
             f"postgresql+psycopg://{encoded_user}:{encoded_password}@{self.db_host}:{self.db_port}/"
             f"{self.db_name}?sslmode={self.db_sslmode}"
         )
+
+
+class _DatabaseContractOverrideSource:
+    _POSTGRES_FIELDS = {"db_host", "db_port", "db_name", "db_user", "db_password", "db_sslmode"}
+
+    def __init__(self, source: PydanticBaseSettingsSource, init_values: dict[str, object]) -> None:
+        self._source = source
+        self._init_values = init_values
+
+    def __call__(self) -> dict[str, object]:
+        values = self._source()
+
+        if "database_url" in self._init_values:
+            values = {key: value for key, value in values.items() if key not in self._POSTGRES_FIELDS}
+
+        if self._POSTGRES_FIELDS.intersection(self._init_values):
+            values.pop("database_url", None)
+
+        return values
