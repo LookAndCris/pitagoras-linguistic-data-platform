@@ -39,8 +39,21 @@ class DocumentSummary(BaseModel):
     created_at: datetime
 
 
+class CategorySummary(BaseModel):
+    category: str
+    total_words: int
+    percentage: float
+
+
+class DocumentsSummary(BaseModel):
+    sample_count: int
+    total_words: int
+    categories: list[CategorySummary]
+
+
 class ListDocumentsResponse(BaseModel):
     items: list[DocumentSummary]
+    summary: DocumentsSummary
 
 
 class MetadataOptionsResponse(BaseModel):

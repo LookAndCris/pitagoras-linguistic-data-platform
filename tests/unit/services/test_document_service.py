@@ -63,7 +63,9 @@ def test_generate_doc_id_returns_prefixed_ulid_shape() -> None:
     assert re.fullmatch(r"doc_[0-9A-HJKMNP-TV-Z]{26}", generated) is not None
 
 
-def test_create_document_returns_created_summary(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_create_document_returns_created_summary_with_mocked_doc_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(
         "packages.services.document_service.generate_doc_id",
         lambda: "doc_01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -135,7 +137,10 @@ def test_list_documents_returns_empty_collection() -> None:
 
     listed = service.list_documents()
 
-    assert listed == []
+    assert listed.items == []
+    assert listed.summary.sample_count == 0
+    assert listed.summary.total_words == 0
+    assert listed.summary.categories == []
 
 
 def test_list_documents_returns_existing_documents(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -157,8 +162,71 @@ def test_list_documents_returns_existing_documents(monkeypatch: pytest.MonkeyPat
 
     listed = service.list_documents()
 
-    assert len(listed) == 1
-    assert listed[0].doc_id == "doc_01ARZ3NDEKTSV4RRFFQ69G5FAA"
+    assert len(listed.items) == 1
+    assert listed.items[0].doc_id == "doc_01ARZ3NDEKTSV4RRFFQ69G5FAA"
+    assert listed.summary.sample_count == 1
+    assert listed.summary.total_words == 2
+    assert [item.model_dump() for item in listed.summary.categories] == [
+        {
+            "category": "Ciencia",
+            "total_words": 2,
+            "percentage": 100.0,
+        }
+    ]
+
+
+def test_list_documents_builds_category_summary_with_deterministic_sorting() -> None:
+    repository = InMemoryRepository()
+    service = DocumentService(repository)
+
+    repository.items = [
+        DocumentSummary(
+            id=uuid4(),
+            doc_id="doc_01ARZ3NDEKTSV4RRFFQ69G5FZZ",
+            category="Académico",
+            subcategory=["syntax"],
+            source="papers",
+            url=None,
+            publication_date=None,
+            word_count=4,
+            created_at=datetime.now(UTC),
+        ),
+        DocumentSummary(
+            id=uuid4(),
+            doc_id="doc_01ARZ3NDEKTSV4RRFFQ69G5FZX",
+            category="Ciencia",
+            subcategory=["morphology"],
+            source="papers",
+            url=None,
+            publication_date=None,
+            word_count=6,
+            created_at=datetime.now(UTC),
+        ),
+        DocumentSummary(
+            id=uuid4(),
+            doc_id="doc_01ARZ3NDEKTSV4RRFFQ69G5FZY",
+            category="Noticias",
+            subcategory=["verbs"],
+            source="noticias",
+            url=None,
+            publication_date=None,
+            word_count=4,
+            created_at=datetime.now(UTC),
+        ),
+    ]
+
+    listed = service.list_documents()
+
+    assert listed.summary.sample_count == 3
+    assert listed.summary.total_words == 14
+    categories = [item.model_dump() for item in listed.summary.categories]
+    assert [item["category"] for item in categories] == ["Ciencia", "Académico", "Noticias"]
+    assert [item["total_words"] for item in categories] == [6, 4, 4]
+    assert [item["percentage"] for item in categories] == [
+        pytest.approx(42.8571428571),
+        pytest.approx(28.5714285714),
+        pytest.approx(28.5714285714),
+    ]
 
 
 def test_create_document_raises_persistence_error_when_repository_fails() -> None:

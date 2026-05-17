@@ -93,7 +93,7 @@ def create_document(
 def list_documents(db_session: Session = Depends(get_db_session)) -> ListDocumentsResponse:
     service = _build_service(db_session)
     try:
-        return ListDocumentsResponse(items=service.list_documents())
+        return service.list_documents()
     except PersistenceUnavailableError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

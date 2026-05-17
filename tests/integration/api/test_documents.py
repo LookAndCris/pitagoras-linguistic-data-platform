@@ -32,6 +32,17 @@ def _pdf_bytes() -> bytes:
     return b"%PDF-1.7\nminimal-placeholder"
 
 
+def _empty_list_response() -> dict[str, object]:
+    return {
+        "items": [],
+        "summary": {
+            "sample_count": 0,
+            "total_words": 0,
+            "categories": [],
+        },
+    }
+
+
 def test_get_metadata_options_returns_canonical_sets(tmp_path: Path) -> None:
     db_path = tmp_path / "documents-metadata-options.sqlite"
     database_url = _sqlite_url(db_path)
@@ -108,7 +119,7 @@ def test_list_documents_returns_empty_items_when_no_records(tmp_path: Path) -> N
         response = client.get("/documents")
 
     assert response.status_code == 200
-    assert response.json() == {"items": []}
+    assert response.json() == _empty_list_response()
 
 
 def test_list_documents_returns_persisted_items(tmp_path: Path) -> None:
@@ -132,11 +143,23 @@ def test_list_documents_returns_persisted_items(tmp_path: Path) -> None:
 
     assert create_response.status_code == 201
     assert list_response.status_code == 200
-    items = list_response.json()["items"]
+    body = list_response.json()
+    items = body["items"]
     assert len(items) == 1
     assert items[0]["doc_id"].startswith("doc_")
     assert items[0]["subcategory"] == ["vowels"]
     assert items[0]["word_count"] == 2
+    assert body["summary"] == {
+        "sample_count": 1,
+        "total_words": 2,
+        "categories": [
+            {
+                "category": "Ciencia",
+                "total_words": 2,
+                "percentage": 100.0,
+            }
+        ],
+    }
 
 
 def test_create_document_rejects_invalid_payload(tmp_path: Path) -> None:
@@ -157,7 +180,7 @@ def test_create_document_rejects_invalid_payload(tmp_path: Path) -> None:
 
     assert response.status_code == 422
     assert list_response.status_code == 200
-    assert list_response.json() == {"items": []}
+    assert list_response.json() == _empty_list_response()
 
 
 def test_create_document_rejects_legacy_doc_id_without_partial_persistence(tmp_path: Path) -> None:
@@ -181,7 +204,7 @@ def test_create_document_rejects_legacy_doc_id_without_partial_persistence(tmp_p
 
     assert response.status_code == 422
     assert list_response.status_code == 200
-    assert list_response.json() == {"items": []}
+    assert list_response.json() == _empty_list_response()
 
 
 def test_create_document_rejects_blank_subcategory_values_without_partial_persistence(tmp_path: Path) -> None:
@@ -204,7 +227,7 @@ def test_create_document_rejects_blank_subcategory_values_without_partial_persis
 
     assert response.status_code == 422
     assert list_response.status_code == 200
-    assert list_response.json() == {"items": []}
+    assert list_response.json() == _empty_list_response()
 
 
 def test_create_document_rejects_blank_raw_text_without_partial_persistence(tmp_path: Path) -> None:
@@ -227,7 +250,7 @@ def test_create_document_rejects_blank_raw_text_without_partial_persistence(tmp_
 
     assert response.status_code == 422
     assert list_response.status_code == 200
-    assert list_response.json() == {"items": []}
+    assert list_response.json() == _empty_list_response()
 
 
 def test_create_document_rejects_noncanonical_category_without_partial_persistence(tmp_path: Path) -> None:
@@ -250,7 +273,7 @@ def test_create_document_rejects_noncanonical_category_without_partial_persisten
 
     assert response.status_code == 422
     assert list_response.status_code == 200
-    assert list_response.json() == {"items": []}
+    assert list_response.json() == _empty_list_response()
 
 
 def test_create_document_rejects_noncanonical_source_without_partial_persistence(tmp_path: Path) -> None:
@@ -273,7 +296,7 @@ def test_create_document_rejects_noncanonical_source_without_partial_persistence
 
     assert response.status_code == 422
     assert list_response.status_code == 200
-    assert list_response.json() == {"items": []}
+    assert list_response.json() == _empty_list_response()
 
 
 def test_create_document_rejects_non_exact_category_label_without_partial_persistence(tmp_path: Path) -> None:
@@ -296,7 +319,7 @@ def test_create_document_rejects_non_exact_category_label_without_partial_persis
 
     assert response.status_code == 422
     assert list_response.status_code == 200
-    assert list_response.json() == {"items": []}
+    assert list_response.json() == _empty_list_response()
 
 
 def test_create_document_rejects_non_exact_source_label_without_partial_persistence(tmp_path: Path) -> None:
@@ -319,7 +342,7 @@ def test_create_document_rejects_non_exact_source_label_without_partial_persiste
 
     assert response.status_code == 422
     assert list_response.status_code == 200
-    assert list_response.json() == {"items": []}
+    assert list_response.json() == _empty_list_response()
 
 
 def test_documents_endpoints_fail_when_persistence_is_unavailable(tmp_path: Path) -> None:
@@ -458,7 +481,7 @@ def test_upload_pdf_rejects_wrong_media_type_without_partial_persistence(
 
     assert upload_response.status_code == 415
     assert list_response.status_code == 200
-    assert list_response.json() == {"items": []}
+    assert list_response.json() == _empty_list_response()
 
 
 def test_upload_pdf_rejects_missing_file_without_partial_persistence(tmp_path: Path) -> None:
@@ -480,7 +503,7 @@ def test_upload_pdf_rejects_missing_file_without_partial_persistence(tmp_path: P
 
     assert upload_response.status_code == 422
     assert list_response.status_code == 200
-    assert list_response.json() == {"items": []}
+    assert list_response.json() == _empty_list_response()
 
 
 def test_upload_pdf_rejects_corrupt_pdf_without_partial_persistence(
@@ -521,7 +544,7 @@ def test_upload_pdf_rejects_corrupt_pdf_without_partial_persistence(
 
     assert upload_response.status_code == 422
     assert list_response.status_code == 200
-    assert list_response.json() == {"items": []}
+    assert list_response.json() == _empty_list_response()
 
 
 def test_upload_pdf_rejects_empty_extraction_without_partial_persistence(
@@ -562,7 +585,7 @@ def test_upload_pdf_rejects_empty_extraction_without_partial_persistence(
 
     assert upload_response.status_code == 422
     assert list_response.status_code == 200
-    assert list_response.json() == {"items": []}
+    assert list_response.json() == _empty_list_response()
 
 
 def test_upload_pdf_rejects_legacy_doc_id_without_partial_persistence(
@@ -594,7 +617,7 @@ def test_upload_pdf_rejects_legacy_doc_id_without_partial_persistence(
 
     assert upload_response.status_code == 422
     assert list_response.status_code == 200
-    assert list_response.json() == {"items": []}
+    assert list_response.json() == _empty_list_response()
 
 
 def test_upload_pdf_rejects_invalid_metadata_without_partial_persistence(
@@ -625,7 +648,7 @@ def test_upload_pdf_rejects_invalid_metadata_without_partial_persistence(
 
     assert upload_response.status_code == 422
     assert list_response.status_code == 200
-    assert list_response.json() == {"items": []}
+    assert list_response.json() == _empty_list_response()
 
 
 def test_upload_pdf_rejects_unexpected_form_fields_without_partial_persistence(
@@ -657,4 +680,4 @@ def test_upload_pdf_rejects_unexpected_form_fields_without_partial_persistence(
 
     assert upload_response.status_code == 422
     assert list_response.status_code == 200
-    assert list_response.json() == {"items": []}
+    assert list_response.json() == _empty_list_response()

@@ -6,8 +6,11 @@ from typing import Protocol
 
 from packages.models.document import DocumentMetadata
 from packages.models.schemas import (
+    CategorySummary,
     CreateDocumentRequest,
     DocumentSummary,
+    DocumentsSummary,
+    ListDocumentsResponse,
     MetadataOptionsResponse,
     PersistDocumentRequest,
 )
@@ -100,6 +103,30 @@ def _validate_canonical_value(field_name: str, value: str, allowed_values: tuple
     return normalized
 
 
+def _build_documents_summary(items: list[DocumentSummary]) -> DocumentsSummary:
+    total_words = sum(item.word_count for item in items)
+    by_category: dict[str, int] = {}
+
+    for item in items:
+        by_category[item.category] = by_category.get(item.category, 0) + item.word_count
+
+    ordered_categories = sorted(by_category.items(), key=lambda pair: (-pair[1], pair[0]))
+    category_summary = [
+        CategorySummary(
+            category=category,
+            total_words=category_total,
+            percentage=(category_total / total_words * 100) if total_words else 0.0,
+        )
+        for category, category_total in ordered_categories
+    ]
+
+    return DocumentsSummary(
+        sample_count=len(items),
+        total_words=total_words,
+        categories=category_summary,
+    )
+
+
 class DocumentRepositoryPort(Protocol):
     def create(self, payload: PersistDocumentRequest) -> DocumentMetadata | DocumentSummary: ...
 
@@ -154,9 +181,13 @@ class DocumentService:
         except Exception as exc:  # noqa: BLE001
             raise PersistenceUnavailableError("Document persistence is unavailable") from exc
 
-    def list_documents(self) -> list[DocumentSummary]:
+    def list_documents(self) -> ListDocumentsResponse:
         try:
             items = self._repository.list()
-            return [DocumentSummary.model_validate(item) for item in items]
+            document_items = [DocumentSummary.model_validate(item) for item in items]
+            return ListDocumentsResponse(
+                items=document_items,
+                summary=_build_documents_summary(document_items),
+            )
         except Exception as exc:  # noqa: BLE001
             raise PersistenceUnavailableError("Document persistence is unavailable") from exc
