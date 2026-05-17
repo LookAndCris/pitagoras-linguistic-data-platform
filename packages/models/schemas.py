@@ -5,6 +5,17 @@ from pydantic import AnyHttpUrl, BaseModel, ConfigDict
 
 
 class CreateDocumentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    category: str
+    subcategory: list[str]
+    source: str
+    url: AnyHttpUrl | None = None
+    publication_year: int | None = None
+    raw_text: str
+
+
+class PersistDocumentRequest(BaseModel):
     doc_id: str
     category: str
     subcategory: list[str]
@@ -32,21 +43,26 @@ class ListDocumentsResponse(BaseModel):
     items: list[DocumentSummary]
 
 
+class MetadataOptionsResponse(BaseModel):
+    categories: list[str]
+    sources: list[str]
+
+
 class PdfUploadMetadata(BaseModel):
-    doc_id: str
+    model_config = ConfigDict(extra="forbid")
+
     category: str
     subcategory: list[str]
     source: str
     url: AnyHttpUrl | None = None
-    publication_date: date | None = None
+    publication_year: int | None = None
 
     def to_create_document_request(self, raw_text: str) -> CreateDocumentRequest:
         return CreateDocumentRequest(
-            doc_id=self.doc_id,
             category=self.category,
             subcategory=self.subcategory,
             source=self.source,
             url=self.url,
-            publication_date=self.publication_date,
+            publication_year=self.publication_year,
             raw_text=raw_text,
         )

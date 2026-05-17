@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from packages.models.document import DocumentMetadata
-from packages.models.schemas import CreateDocumentRequest, DocumentSummary
+from packages.models.schemas import DocumentSummary, PersistDocumentRequest
 from packages.services.document_service import DuplicateDocumentError
 
 
@@ -28,7 +28,7 @@ class DocumentRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def create(self, payload: CreateDocumentRequest) -> DocumentSummary:
+    def create(self, payload: PersistDocumentRequest) -> DocumentSummary:
         entity = DocumentMetadata(
             doc_id=payload.doc_id,
             category=payload.category,
