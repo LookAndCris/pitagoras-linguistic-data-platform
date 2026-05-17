@@ -66,6 +66,21 @@ curl http://127.0.0.1:8000/health/ready
 curl http://127.0.0.1:8000/documents
 ```
 
+## Frontend ingestion shell (Streamlit)
+
+Run the thin frontend shell against the existing backend API:
+
+```bash
+export PITAGORAS_FRONTEND_API_BASE_URL="http://127.0.0.1:8000"
+poetry run streamlit run apps/frontend/main.py
+```
+
+Notes:
+
+- Default API base URL is `http://localhost:8000` when `PITAGORAS_FRONTEND_API_BASE_URL` is not set.
+- The shell currently includes only these flows: **Manual ingestion**, **PDF upload**, and **Document list**.
+- Auth, document detail, pagination, and search are intentionally out of scope for this slice.
+
 ## Test bootstrap
 
 Run the minimal repository smoke test from the project root:
