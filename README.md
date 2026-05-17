@@ -2,6 +2,46 @@
 
 ## Backend foundation bootstrap
 
+## Full local startup sequence
+
+Happy path for the full local system: Dockerized PostgreSQL + backend API + Streamlit frontend.
+
+Terminal 1:
+
+```bash
+poetry install
+cp .env.example .env
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
+PITAGORAS_DB_HOST=127.0.0.1 PITAGORAS_DB_PORT=${PITAGORAS_LOCAL_DB_PORT:-55432} PITAGORAS_DB_NAME=${PITAGORAS_LOCAL_DB_NAME:-pitagoras} PITAGORAS_DB_USER=${PITAGORAS_LOCAL_DB_USER:-pitagoras} PITAGORAS_DB_PASSWORD=${PITAGORAS_LOCAL_DB_PASSWORD:-pitagoras} PITAGORAS_DB_SSLMODE=disable poetry run alembic -c apps/backend/alembic.ini upgrade head
+until curl -fsS http://127.0.0.1:8000/health/ready; do sleep 2; done
+```
+
+Terminal 2:
+
+```bash
+export PITAGORAS_FRONTEND_API_BASE_URL="http://127.0.0.1:8000"
+poetry run streamlit run apps/frontend/main.py
+```
+
+Readiness timing:
+
+- After `docker compose ... up -d`, give PostgreSQL and the backend a few seconds to initialize.
+- Expect `curl http://127.0.0.1:8000/health/ready` to need brief polling/retry before it returns success.
+
+Full local shutdown sequence:
+
+Terminal 2:
+
+```bash
+Ctrl+C
+```
+
+Terminal 1:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml down
+```
+
 Run the backend with an external PostgreSQL instance (no compose-managed DB sidecar):
 
 ```bash
