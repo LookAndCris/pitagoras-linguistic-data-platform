@@ -20,7 +20,7 @@ Terminal 2:
 
 ```bash
 export PITAGORAS_FRONTEND_API_BASE_URL="http://127.0.0.1:8000"
-poetry run streamlit run apps/frontend/main.py
+poetry run streamlit run streamlit_app.py
 ```
 
 Readiness timing:
@@ -112,7 +112,7 @@ Run the thin frontend shell against the existing backend API:
 
 ```bash
 export PITAGORAS_FRONTEND_API_BASE_URL="http://127.0.0.1:8000"
-poetry run streamlit run apps/frontend/main.py
+poetry run streamlit run streamlit_app.py
 ```
 
 Notes:
