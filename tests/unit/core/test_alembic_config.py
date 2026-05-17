@@ -1,3 +1,5 @@
+from alembic.config import Config
+
 from packages.core.alembic_config import DEFAULT_ALEMBIC_URL, resolve_alembic_database_url
 
 
@@ -31,3 +33,9 @@ def test_resolve_alembic_database_url_keeps_explicit_override_without_building_s
     )
 
     assert resolved == explicit_url
+
+
+def test_alembic_ini_uses_os_path_separator_for_prepend_sys_path() -> None:
+    cfg = Config("apps/backend/alembic.ini")
+
+    assert cfg.get_main_option("path_separator") == "os"
