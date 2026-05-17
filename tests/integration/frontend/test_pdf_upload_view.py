@@ -8,6 +8,34 @@ import pytest
 from apps.frontend.api.client import BackendApiError
 
 
+APPROVED_METADATA_OPTIONS = {
+    "categories": [
+        "Noticias",
+        "Tecnología",
+        "Negocios",
+        "Ciencia",
+        "Salud",
+        "Deportes",
+        "Entretenimiento",
+        "Literatura",
+        "Redes Sociales",
+        "Lifestyle",
+        "Política",
+        "Académico",
+    ],
+    "sources": [
+        "papers",
+        "noticias",
+        "blogs",
+        "redes sociales",
+        "entrevistas",
+        "podcasts",
+        "documentación",
+        "novelas",
+    ],
+}
+
+
 @dataclass
 class _UploadedFile:
     name: str
@@ -23,6 +51,9 @@ class _PdfClientSuccess:
         self.last_metadata: dict[str, Any] | None = None
         self.last_file: tuple[str, bytes, str] | None = None
 
+    def get_metadata_options(self) -> dict[str, list[str]]:
+        return APPROVED_METADATA_OPTIONS
+
     def upload_pdf_document(
         self,
         metadata: dict[str, Any],
@@ -35,7 +66,7 @@ class _PdfClientSuccess:
         self.last_file = (filename, content, content_type)
         return {
             "id": "b4b9c38b-5500-43fb-91cf-a66ff7d3df6d",
-            "doc_id": metadata["doc_id"],
+            "doc_id": "doc_generated",
             "category": metadata["category"],
             "subcategory": metadata["subcategory"],
             "source": metadata["source"],
@@ -47,6 +78,9 @@ class _PdfClientSuccess:
 class _PdfClientError:
     def __init__(self, error: BackendApiError) -> None:
         self.error = error
+
+    def get_metadata_options(self) -> dict[str, list[str]]:
+        return APPROVED_METADATA_OPTIONS
 
     def upload_pdf_document(
         self,
@@ -63,25 +97,15 @@ def _patch_pdf_streamlit(
     monkeypatch: pytest.MonkeyPatch,
     pdf_module: Any,
     *,
-    doc_id: str = "pdf-123",
-    category: str = "linguistics",
+    category: str = "Tecnología",
     subcategory_raw: str = "syntax, morphology",
-    source: str = "manual",
+    source: str = "papers",
     url: str = "https://example.com/pdf-123",
-    publication_date: str = "2026-05-17",
+    publication_year: int = 2026,
     uploaded_file: _UploadedFile | None = None,
     submit: bool = True,
 ) -> dict[str, list[Any]]:
     calls: dict[str, list[Any]] = {"warning": [], "error": [], "success": [], "json": []}
-
-    text_values = {
-        "Document ID": doc_id,
-        "Category": category,
-        "Subcategory (comma-separated)": subcategory_raw,
-        "Source": source,
-        "URL (optional)": url,
-        "Publication date (optional, YYYY-MM-DD)": publication_date,
-    }
 
     file_value = uploaded_file or _UploadedFile(
         name="sample.pdf",
@@ -90,7 +114,20 @@ def _patch_pdf_streamlit(
     )
 
     monkeypatch.setattr(pdf_module.st, "subheader", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(pdf_module.st, "text_input", lambda label, **_kwargs: text_values[label])
+    monkeypatch.setattr(
+        pdf_module.st,
+        "selectbox",
+        lambda label, options, **_kwargs: category if label == "Category" else source,
+    )
+    monkeypatch.setattr(
+        pdf_module.st,
+        "text_input",
+        lambda label, **_kwargs: {
+            "Subcategory (comma-separated)": subcategory_raw,
+            "URL (optional)": url,
+        }[label],
+    )
+    monkeypatch.setattr(pdf_module.st, "number_input", lambda *_args, **_kwargs: publication_year)
     monkeypatch.setattr(pdf_module.st, "file_uploader", lambda *_args, **_kwargs: file_value)
     monkeypatch.setattr(pdf_module.st, "button", lambda *_args, **_kwargs: submit)
     monkeypatch.setattr(pdf_module.st, "warning", lambda message, **_kwargs: calls["warning"].append(message))
@@ -107,14 +144,51 @@ def test_pdf_upload_submits_multipart_payload_and_renders_created_summary(monkey
     calls = _patch_pdf_streamlit(monkeypatch, pdf_upload)
     client = _PdfClientSuccess()
 
-    pdf_upload.render_pdf_upload_view(client)
+    pdf_upload.render_pdf_upload_view(client, APPROVED_METADATA_OPTIONS)
 
     assert client.last_metadata is not None
+    assert client.last_metadata["category"] == "Tecnología"
     assert client.last_metadata["subcategory"] == ["syntax", "morphology"]
+    assert client.last_metadata["source"] == "papers"
+    assert client.last_metadata["publication_year"] == 2026
+    assert "doc_id" not in client.last_metadata
     assert client.last_file == ("sample.pdf", b"%PDF-1.7\nplaceholder", "application/pdf")
     assert calls["success"]
     assert calls["json"]
+    assert calls["json"][0]["doc_id"] == "doc_generated"
     assert not calls["error"]
+
+
+def test_pdf_upload_publication_year_input_disallows_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    from apps.frontend.views import pdf_upload
+
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(pdf_upload.st, "subheader", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        pdf_upload.st,
+        "selectbox",
+        lambda label, options, **_kwargs: "Tecnología" if label == "Category" else "papers",
+    )
+    monkeypatch.setattr(
+        pdf_upload.st,
+        "text_input",
+        lambda label, **_kwargs: "syntax" if label == "Subcategory (comma-separated)" else "",
+    )
+    monkeypatch.setattr(
+        pdf_upload.st,
+        "number_input",
+        lambda *args, **kwargs: captured.update({"args": args, "kwargs": kwargs}) or None,
+    )
+    monkeypatch.setattr(pdf_upload.st, "file_uploader", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(pdf_upload.st, "button", lambda *_args, **_kwargs: False)
+
+    pdf_upload.render_pdf_upload_view(_PdfClientSuccess(), APPROVED_METADATA_OPTIONS)
+
+    assert captured["args"][0] == "Publication year (optional)"
+    assert captured["kwargs"]["min_value"] == 1
+    assert captured["kwargs"]["max_value"] == 9999
+    assert captured["kwargs"]["value"] is None
 
 
 @pytest.mark.parametrize(
@@ -137,7 +211,7 @@ def test_pdf_upload_renders_expected_backend_errors(
     calls = _patch_pdf_streamlit(monkeypatch, pdf_upload)
     client = _PdfClientError(BackendApiError(status_code=status_code, detail=detail))
 
-    pdf_upload.render_pdf_upload_view(client)
+    pdf_upload.render_pdf_upload_view(client, APPROVED_METADATA_OPTIONS)
 
     assert calls["error"]
     assert expected_fragment in calls["error"][0]

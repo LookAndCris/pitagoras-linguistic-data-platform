@@ -21,7 +21,7 @@ def build_subcategory_list(raw: str | list[str]) -> list[str]:
         candidates = raw
     else:
         candidates = raw.split(",")
-    return [item.strip() for item in candidates if item.strip()]
+    return [item.strip().lower() for item in candidates if item.strip()]
 
 
 def _normalize_detail(detail: Any) -> str:
@@ -91,6 +91,9 @@ class BackendClient:
         serialized = _serialize_payload(payload)
         return self.request_json("POST", "/documents", json_body=serialized)
 
+    def get_metadata_options(self) -> dict[str, Any]:
+        return self.request_json("GET", "/documents/metadata-options")
+
     def list_documents(self) -> dict[str, Any]:
         return self.request_json("GET", "/documents")
 
@@ -105,7 +108,7 @@ class BackendClient:
         url = f"{self.base_url}/documents/upload-pdf"
         data: list[tuple[str, str]] = []
 
-        for key in ("doc_id", "category", "source"):
+        for key in ("category", "source"):
             value = metadata.get(key)
             if value is not None:
                 data.append((key, str(value)))
@@ -113,9 +116,9 @@ class BackendClient:
         for item in build_subcategory_list(metadata.get("subcategory", [])):
             data.append(("subcategory", item))
 
-        for optional_key in ("url", "publication_date"):
+        for optional_key in ("url", "publication_year"):
             value = metadata.get(optional_key)
-            if value:
+            if value is not None and value != "":
                 data.append((optional_key, str(value)))
 
         files = {"file": (filename, content, content_type)}

@@ -23,6 +23,14 @@ export PITAGORAS_FRONTEND_API_BASE_URL="http://127.0.0.1:8000"
 poetry run streamlit run streamlit_app.py
 ```
 
+If backend routes changed, use this safe restart sequence before starting the frontend:
+
+```bash
+docker compose up -d --build backend
+export PITAGORAS_FRONTEND_API_BASE_URL="http://127.0.0.1:8000"
+poetry run streamlit run streamlit_app.py
+```
+
 Readiness timing:
 
 - After `docker compose ... up -d`, give PostgreSQL and the backend a few seconds to initialize.
@@ -96,7 +104,7 @@ Recommended optional settings:
 Deploy order for external DB environments:
 1. Configure `.env` from `.env.example`.
 2. Run Alembic migrations against the external PostgreSQL target.
-3. Start backend container with `docker compose up -d backend`.
+3. Start backend container with `docker compose up -d --build backend` when backend routes changed.
 
 Smoke-check API runtime endpoints:
 
@@ -118,6 +126,7 @@ poetry run streamlit run streamlit_app.py
 Notes:
 
 - Default API base URL is `http://localhost:8000` when `PITAGORAS_FRONTEND_API_BASE_URL` is not set.
+- If the frontend returns a 404 after backend route changes, rebuild the runtime first with `docker compose up -d --build backend`.
 - The shell currently includes only these flows: **Manual ingestion**, **PDF upload**, and **Document list**.
 - Auth, document detail, pagination, and search are intentionally out of scope for this slice.
 

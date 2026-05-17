@@ -57,9 +57,9 @@ def test_document_list_renders_rows_when_backend_returns_items(monkeypatch: pyte
             {
                 "id": "a6adf7da-35c4-40e8-8a5a-345dd5702225",
                 "doc_id": "doc-001",
-                "category": "linguistics",
+                "category": "Académico",
                 "subcategory": ["syntax", "morphology"],
-                "source": "manual",
+                "source": "papers",
                 "url": None,
                 "publication_date": None,
                 "word_count": 25,

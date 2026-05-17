@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from apps.frontend.api.client import BackendApiError, BackendClient, build_subcategory_list
 from apps.frontend.ui.feedback import render_created_document_summary, render_error
 
@@ -7,7 +9,7 @@ import streamlit as st
 
 
 def _required_fields_present(payload: dict[str, str], has_file: bool) -> bool:
-    required_keys = ["doc_id", "category", "subcategory_raw", "source"]
+    required_keys = ["category", "subcategory_raw", "source"]
     missing = [key for key in required_keys if not payload.get(key, "").strip()]
 
     if missing or not has_file:
@@ -16,16 +18,18 @@ def _required_fields_present(payload: dict[str, str], has_file: bool) -> bool:
     return True
 
 
-def render_pdf_upload_view(client: BackendClient) -> None:
+def render_pdf_upload_view(client: BackendClient, metadata_options: dict[str, Sequence[str]]) -> None:
     st.subheader("PDF upload")
 
+    categories = list(metadata_options.get("categories", []))
+    sources = list(metadata_options.get("sources", []))
+
     payload = {
-        "doc_id": st.text_input("Document ID"),
-        "category": st.text_input("Category"),
+        "category": st.selectbox("Category", categories),
         "subcategory_raw": st.text_input("Subcategory (comma-separated)"),
-        "source": st.text_input("Source"),
+        "source": st.selectbox("Source", sources),
         "url": st.text_input("URL (optional)"),
-        "publication_date": st.text_input("Publication date (optional, YYYY-MM-DD)"),
+        "publication_year": st.number_input("Publication year (optional)", min_value=1, max_value=9999, value=None),
     }
 
     uploaded_file = st.file_uploader("PDF file", type=["pdf"])
@@ -42,7 +46,6 @@ def render_pdf_upload_view(client: BackendClient) -> None:
         return
 
     metadata = {
-        "doc_id": payload["doc_id"].strip(),
         "category": payload["category"].strip(),
         "subcategory": build_subcategory_list(payload["subcategory_raw"]),
         "source": payload["source"].strip(),
@@ -50,8 +53,8 @@ def render_pdf_upload_view(client: BackendClient) -> None:
 
     if payload["url"].strip():
         metadata["url"] = payload["url"].strip()
-    if payload["publication_date"].strip():
-        metadata["publication_date"] = payload["publication_date"].strip()
+    if payload["publication_year"] is not None:
+        metadata["publication_year"] = int(payload["publication_year"])
 
     try:
         created = client.upload_pdf_document(
