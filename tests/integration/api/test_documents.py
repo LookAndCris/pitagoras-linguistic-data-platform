@@ -32,6 +32,44 @@ def _pdf_bytes() -> bytes:
     return b"%PDF-1.7\nminimal-placeholder"
 
 
+def test_get_metadata_options_returns_canonical_sets(tmp_path: Path) -> None:
+    db_path = tmp_path / "documents-metadata-options.sqlite"
+    database_url = _sqlite_url(db_path)
+    _upgrade_to_head(database_url)
+    app = create_app(Settings(database_url=database_url))
+
+    with TestClient(app) as client:
+        response = client.get("/documents/metadata-options")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "categories": [
+            "Noticias",
+            "Tecnología",
+            "Negocios",
+            "Ciencia",
+            "Salud",
+            "Deportes",
+            "Entretenimiento",
+            "Literatura",
+            "Redes Sociales",
+            "Lifestyle",
+            "Política",
+            "Académico",
+        ],
+        "sources": [
+            "papers",
+            "noticias",
+            "blogs",
+            "redes sociales",
+            "entrevistas",
+            "podcasts",
+            "documentación",
+            "novelas",
+        ],
+    }
+
+
 def test_create_document_metadata_returns_created_item(tmp_path: Path) -> None:
     db_path = tmp_path / "documents-create.sqlite"
     database_url = _sqlite_url(db_path)
@@ -39,12 +77,11 @@ def test_create_document_metadata_returns_created_item(tmp_path: Path) -> None:
     app = create_app(Settings(database_url=database_url))
 
     payload = {
-        "doc_id": "doc-100",
-        "category": "grammar",
-        "subcategory": ["verbs", "mood"],
-        "source": "manual",
+        "category": "Tecnología",
+        "subcategory": [" Verbs ", "Mood"],
+        "source": "blogs",
         "url": "https://example.com/doc-100",
-        "publication_date": str(date(2024, 12, 1)),
+        "publication_year": 2024,
         "raw_text": "uno dos tres",
     }
 
@@ -53,10 +90,11 @@ def test_create_document_metadata_returns_created_item(tmp_path: Path) -> None:
 
     assert response.status_code == 201
     body = response.json()
-    assert body["doc_id"] == "doc-100"
-    assert body["category"] == "grammar"
+    assert body["doc_id"].startswith("doc_")
+    assert body["category"] == "Tecnología"
     assert body["subcategory"] == ["verbs", "mood"]
-    assert body["source"] == "manual"
+    assert body["source"] == "blogs"
+    assert body["publication_date"] == str(date(2024, 1, 1))
     assert body["word_count"] == 3
 
 
@@ -80,12 +118,11 @@ def test_list_documents_returns_persisted_items(tmp_path: Path) -> None:
     app = create_app(Settings(database_url=database_url))
 
     payload = {
-        "doc_id": "doc-101",
-        "category": "phonetics",
+        "category": "Ciencia",
         "subcategory": ["vowels"],
-        "source": "manual",
+        "source": "papers",
         "url": None,
-        "publication_date": None,
+        "publication_year": None,
         "raw_text": "uno dos",
     }
 
@@ -97,7 +134,7 @@ def test_list_documents_returns_persisted_items(tmp_path: Path) -> None:
     assert list_response.status_code == 200
     items = list_response.json()["items"]
     assert len(items) == 1
-    assert items[0]["doc_id"] == "doc-101"
+    assert items[0]["doc_id"].startswith("doc_")
     assert items[0]["subcategory"] == ["vowels"]
     assert items[0]["word_count"] == 2
 
@@ -112,8 +149,32 @@ def test_create_document_rejects_invalid_payload(tmp_path: Path) -> None:
         response = client.post(
             "/documents",
             json={
-                "category": "grammar",
-                "source": "manual",
+                "category": "Noticias",
+                "source": "noticias",
+            },
+        )
+        list_response = client.get("/documents")
+
+    assert response.status_code == 422
+    assert list_response.status_code == 200
+    assert list_response.json() == {"items": []}
+
+
+def test_create_document_rejects_legacy_doc_id_without_partial_persistence(tmp_path: Path) -> None:
+    db_path = tmp_path / "documents-legacy-doc-id.sqlite"
+    database_url = _sqlite_url(db_path)
+    _upgrade_to_head(database_url)
+    app = create_app(Settings(database_url=database_url))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/documents",
+            json={
+                "doc_id": "doc-legacy",
+                "category": "Noticias",
+                "subcategory": ["verbs"],
+                "source": "noticias",
+                "raw_text": "uno dos",
             },
         )
         list_response = client.get("/documents")
@@ -133,10 +194,9 @@ def test_create_document_rejects_blank_subcategory_values_without_partial_persis
         response = client.post(
             "/documents",
             json={
-                "doc_id": "doc-blank-subcategory",
-                "category": "grammar",
+                "category": "Noticias",
                 "subcategory": ["  ", ""],
-                "source": "manual",
+                "source": "noticias",
                 "raw_text": "uno dos",
             },
         )
@@ -157,10 +217,9 @@ def test_create_document_rejects_blank_raw_text_without_partial_persistence(tmp_
         response = client.post(
             "/documents",
             json={
-                "doc_id": "doc-blank-raw-text",
-                "category": "grammar",
+                "category": "Noticias",
                 "subcategory": ["verbs"],
-                "source": "manual",
+                "source": "noticias",
                 "raw_text": " \n\t ",
             },
         )
@@ -171,35 +230,8 @@ def test_create_document_rejects_blank_raw_text_without_partial_persistence(tmp_
     assert list_response.json() == {"items": []}
 
 
-def test_create_document_rejects_duplicate_doc_id_with_409_and_no_partial_persistence(tmp_path: Path) -> None:
-    db_path = tmp_path / "documents-duplicate.sqlite"
-    database_url = _sqlite_url(db_path)
-    _upgrade_to_head(database_url)
-    app = create_app(Settings(database_url=database_url))
-
-    payload = {
-        "doc_id": "doc-duplicate",
-        "category": "syntax",
-        "subcategory": ["clauses"],
-        "source": "manual",
-        "url": "https://example.com/doc-duplicate",
-        "publication_date": str(date(2025, 1, 15)),
-        "raw_text": "uno dos",
-    }
-
-    with TestClient(app) as client:
-        first_response = client.post("/documents", json=payload)
-        duplicate_response = client.post("/documents", json=payload)
-        list_response = client.get("/documents")
-
-    assert first_response.status_code == 201
-    assert duplicate_response.status_code == 409
-    assert list_response.status_code == 200
-    assert len(list_response.json()["items"]) == 1
-
-
-def test_create_document_rejects_invalid_publication_date_without_partial_persistence(tmp_path: Path) -> None:
-    db_path = tmp_path / "documents-invalid-publication-date.sqlite"
+def test_create_document_rejects_noncanonical_category_without_partial_persistence(tmp_path: Path) -> None:
+    db_path = tmp_path / "documents-invalid-category.sqlite"
     database_url = _sqlite_url(db_path)
     _upgrade_to_head(database_url)
     app = create_app(Settings(database_url=database_url))
@@ -208,11 +240,78 @@ def test_create_document_rejects_invalid_publication_date_without_partial_persis
         response = client.post(
             "/documents",
             json={
-                "doc_id": "doc-invalid-date",
-                "category": "grammar",
+                "category": "Invalid Category",
+                "subcategory": ["clauses"],
+                "source": "noticias",
+                "raw_text": "uno dos",
+            },
+        )
+        list_response = client.get("/documents")
+
+    assert response.status_code == 422
+    assert list_response.status_code == 200
+    assert list_response.json() == {"items": []}
+
+
+def test_create_document_rejects_noncanonical_source_without_partial_persistence(tmp_path: Path) -> None:
+    db_path = tmp_path / "documents-invalid-source.sqlite"
+    database_url = _sqlite_url(db_path)
+    _upgrade_to_head(database_url)
+    app = create_app(Settings(database_url=database_url))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/documents",
+            json={
+                "category": "Tecnología",
                 "subcategory": ["verbs"],
                 "source": "manual",
-                "publication_date": "2026-99-99",
+                "raw_text": "uno dos",
+            },
+        )
+        list_response = client.get("/documents")
+
+    assert response.status_code == 422
+    assert list_response.status_code == 200
+    assert list_response.json() == {"items": []}
+
+
+def test_create_document_rejects_non_exact_category_label_without_partial_persistence(tmp_path: Path) -> None:
+    db_path = tmp_path / "documents-invalid-category-casing.sqlite"
+    database_url = _sqlite_url(db_path)
+    _upgrade_to_head(database_url)
+    app = create_app(Settings(database_url=database_url))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/documents",
+            json={
+                "category": "tecnología",
+                "subcategory": ["clauses"],
+                "source": "blogs",
+                "raw_text": "uno dos",
+            },
+        )
+        list_response = client.get("/documents")
+
+    assert response.status_code == 422
+    assert list_response.status_code == 200
+    assert list_response.json() == {"items": []}
+
+
+def test_create_document_rejects_non_exact_source_label_without_partial_persistence(tmp_path: Path) -> None:
+    db_path = tmp_path / "documents-invalid-source-casing.sqlite"
+    database_url = _sqlite_url(db_path)
+    _upgrade_to_head(database_url)
+    app = create_app(Settings(database_url=database_url))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/documents",
+            json={
+                "category": "Tecnología",
+                "subcategory": ["clauses"],
+                "source": "Blogs",
                 "raw_text": "uno dos",
             },
         )
@@ -231,12 +330,11 @@ def test_documents_endpoints_fail_when_persistence_is_unavailable(tmp_path: Path
         create_response = client.post(
             "/documents",
             json={
-                "doc_id": "doc-999",
-                "category": "grammar",
+                "category": "Noticias",
                 "subcategory": ["verbs"],
-                "source": "manual",
+                "source": "noticias",
                 "url": None,
-                "publication_date": None,
+                "publication_year": None,
                 "raw_text": "uno",
             },
         )
@@ -252,12 +350,11 @@ def test_documents_create_and_list_on_postgres_when_available(
     app = create_app(Settings(database_url=migrated_postgres_database_url))
 
     payload = {
-        "doc_id": "doc-pg-001",
-        "category": "syntax",
-        "subcategory": ["clauses", "dependent"],
-        "source": "manual",
+        "category": "Literatura",
+        "subcategory": ["Clauses", "DEPENDENT"],
+        "source": "novelas",
         "url": "https://example.com/doc-pg-001",
-        "publication_date": str(date(2025, 1, 15)),
+        "publication_year": 2025,
         "raw_text": "uno dos tres cuatro",
     }
 
@@ -269,8 +366,9 @@ def test_documents_create_and_list_on_postgres_when_available(
     assert list_response.status_code == 200
     items = list_response.json()["items"]
     assert len(items) == 1
-    assert items[0]["doc_id"] == "doc-pg-001"
+    assert items[0]["doc_id"].startswith("doc_")
     assert items[0]["subcategory"] == ["clauses", "dependent"]
+    assert items[0]["publication_date"] == str(date(2025, 1, 1))
     assert items[0]["word_count"] == 4
 
 
@@ -315,12 +413,11 @@ def test_upload_pdf_creates_document_from_extracted_text_without_auth(
         upload_response = client.post(
             "/documents/upload-pdf",
             data={
-                "doc_id": "doc-upload-001",
-                "category": "grammar",
-                "subcategory": ["verbs", "mood"],
-                "source": "manual",
+                "category": "Tecnología",
+                "subcategory": ["Verbs", "Mood"],
+                "source": "blogs",
                 "url": "https://example.com/doc-upload-001",
-                "publication_date": "2025-03-10",
+                "publication_year": "2025",
             },
             files={"file": ("sample.pdf", _pdf_bytes(), "application/pdf")},
         )
@@ -328,8 +425,9 @@ def test_upload_pdf_creates_document_from_extracted_text_without_auth(
 
     assert upload_response.status_code == 201
     body = upload_response.json()
-    assert body["doc_id"] == "doc-upload-001"
+    assert body["doc_id"].startswith("doc_")
     assert body["subcategory"] == ["verbs", "mood"]
+    assert body["publication_date"] == str(date(2025, 1, 1))
     assert body["word_count"] == 3
     assert "file" not in body
     assert "file_reference" not in body
@@ -350,10 +448,9 @@ def test_upload_pdf_rejects_wrong_media_type_without_partial_persistence(
         upload_response = client.post(
             "/documents/upload-pdf",
             data={
-                "doc_id": "doc-upload-wrong-media",
-                "category": "grammar",
+                "category": "Noticias",
                 "subcategory": ["verbs"],
-                "source": "manual",
+                "source": "noticias",
             },
             files={"file": ("sample.txt", b"plain text", "text/plain")},
         )
@@ -374,10 +471,9 @@ def test_upload_pdf_rejects_missing_file_without_partial_persistence(tmp_path: P
         upload_response = client.post(
             "/documents/upload-pdf",
             data={
-                "doc_id": "doc-upload-missing-file",
-                "category": "grammar",
+                "category": "Noticias",
                 "subcategory": ["verbs"],
-                "source": "manual",
+                "source": "noticias",
             },
         )
         list_response = client.get("/documents")
@@ -415,10 +511,9 @@ def test_upload_pdf_rejects_corrupt_pdf_without_partial_persistence(
         upload_response = client.post(
             "/documents/upload-pdf",
             data={
-                "doc_id": "doc-upload-corrupt",
-                "category": "grammar",
+                "category": "Noticias",
                 "subcategory": ["verbs"],
-                "source": "manual",
+                "source": "noticias",
             },
             files={"file": ("broken.pdf", _pdf_bytes(), "application/pdf")},
         )
@@ -457,10 +552,9 @@ def test_upload_pdf_rejects_empty_extraction_without_partial_persistence(
         upload_response = client.post(
             "/documents/upload-pdf",
             data={
-                "doc_id": "doc-upload-empty",
-                "category": "grammar",
+                "category": "Noticias",
                 "subcategory": ["verbs"],
-                "source": "manual",
+                "source": "noticias",
             },
             files={"file": ("image-only.pdf", _pdf_bytes(), "application/pdf")},
         )
@@ -471,11 +565,11 @@ def test_upload_pdf_rejects_empty_extraction_without_partial_persistence(
     assert list_response.json() == {"items": []}
 
 
-def test_upload_pdf_rejects_duplicate_doc_id_with_409_and_no_partial_persistence(
+def test_upload_pdf_rejects_legacy_doc_id_without_partial_persistence(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    db_path = tmp_path / "documents-upload-duplicate.sqlite"
+    db_path = tmp_path / "documents-upload-legacy-doc-id.sqlite"
     database_url = _sqlite_url(db_path)
     _upgrade_to_head(database_url)
     app = create_app(Settings(database_url=database_url))
@@ -486,32 +580,21 @@ def test_upload_pdf_rejects_duplicate_doc_id_with_409_and_no_partial_persistence
     )
 
     with TestClient(app) as client:
-        first_response = client.post(
+        upload_response = client.post(
             "/documents/upload-pdf",
             data={
-                "doc_id": "doc-upload-duplicate",
-                "category": "grammar",
+                "doc_id": "doc-upload-legacy",
+                "category": "Noticias",
                 "subcategory": ["verbs"],
-                "source": "manual",
+                "source": "noticias",
             },
             files={"file": ("first.pdf", _pdf_bytes(), "application/pdf")},
         )
-        duplicate_response = client.post(
-            "/documents/upload-pdf",
-            data={
-                "doc_id": "doc-upload-duplicate",
-                "category": "grammar",
-                "subcategory": ["verbs"],
-                "source": "manual",
-            },
-            files={"file": ("duplicate.pdf", _pdf_bytes(), "application/pdf")},
-        )
         list_response = client.get("/documents")
 
-    assert first_response.status_code == 201
-    assert duplicate_response.status_code == 409
+    assert upload_response.status_code == 422
     assert list_response.status_code == 200
-    assert len(list_response.json()["items"]) == 1
+    assert list_response.json() == {"items": []}
 
 
 def test_upload_pdf_rejects_invalid_metadata_without_partial_persistence(
@@ -532,10 +615,41 @@ def test_upload_pdf_rejects_invalid_metadata_without_partial_persistence(
         upload_response = client.post(
             "/documents/upload-pdf",
             data={
-                "doc_id": "doc-upload-invalid-metadata",
-                "category": "grammar",
+                "category": "Noticias",
                 "subcategory": ["  ", ""],
-                "source": "manual",
+                "source": "noticias",
+            },
+            files={"file": ("sample.pdf", _pdf_bytes(), "application/pdf")},
+        )
+        list_response = client.get("/documents")
+
+    assert upload_response.status_code == 422
+    assert list_response.status_code == 200
+    assert list_response.json() == {"items": []}
+
+
+def test_upload_pdf_rejects_unexpected_form_fields_without_partial_persistence(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    db_path = tmp_path / "documents-upload-unexpected-field.sqlite"
+    database_url = _sqlite_url(db_path)
+    _upgrade_to_head(database_url)
+    app = create_app(Settings(database_url=database_url))
+
+    monkeypatch.setattr(
+        "apps.backend.app.api.routes.documents.extract_pdf_text",
+        lambda *_args, **_kwargs: "uno dos",
+    )
+
+    with TestClient(app) as client:
+        upload_response = client.post(
+            "/documents/upload-pdf",
+            data={
+                "category": "Noticias",
+                "subcategory": ["verbs"],
+                "source": "noticias",
+                "publication_date": "2025-03-10",
             },
             files={"file": ("sample.pdf", _pdf_bytes(), "application/pdf")},
         )
